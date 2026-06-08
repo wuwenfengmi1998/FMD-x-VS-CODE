@@ -3,6 +3,8 @@
   "displayName": "FMD C Compiler",
   "description": "FMD/FT61FC6X 系列 MCU 编译器支持（C.exe 工具链）",
   "version": "0.2.0",
+  "license": "MIT",
+  "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
