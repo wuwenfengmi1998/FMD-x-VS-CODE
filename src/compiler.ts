@@ -70,7 +70,8 @@ export class FmdCompiler {
         }
 
         const projectName = projectInfo?.projectName || path.basename(projectDir);
-        const outputDir = cfg.outputDir || projectDir;
+        const outputDir = this.resolveOutputDir(projectDir, cfg.outputDir);
+        fs.mkdirSync(outputDir, { recursive: true });
         const artifacts = this.getOutputArtifacts(projectDir, projectName, outputDir);
 
         this.building = true;
@@ -229,7 +230,7 @@ export class FmdCompiler {
         }
 
         const projectName = projectInfo?.projectName || path.basename(projectDir);
-        const outputDir = cfg.outputDir || projectDir;
+        const outputDir = this.resolveOutputDir(projectDir, cfg.outputDir);
         return this.getOutputArtifacts(projectDir, projectName, outputDir);
     }
 
@@ -241,6 +242,13 @@ export class FmdCompiler {
             hexFile: path.join(outputDir, projectName + '.hex'),
             binFile: path.join(outputDir, projectName + '.bin'),
         };
+    }
+
+    private resolveOutputDir(projectDir: string, outputDir: string): string {
+        if (!outputDir) {
+            return projectDir;
+        }
+        return path.isAbsolute(outputDir) ? outputDir : path.join(projectDir, outputDir);
     }
 
     /**

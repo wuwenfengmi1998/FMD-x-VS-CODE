@@ -2,7 +2,7 @@
   "name": "fmd-c-compiler",
   "displayName": "FMD C Compiler",
   "description": "FMD/FT61FC6X 系列 MCU 编译器支持（C.exe 工具链）",
-  "version": "0.2.0",
+  "version": "0.2.8",
   "license": "MIT",
   "icon": "resources/icon.png",
   "engines": {
@@ -78,6 +78,11 @@
       {
         "command": "fmdCompiler.exportEepromHex",
         "title": "FMD: Export EEPROM HEX"
+      },
+      {
+        "command": "fmdCompiler.regenerateConfig",
+        "title": "FMD: Regenerate VS Code Config",
+        "icon": "$(gear)"
       }
     ],
     "keybindings": [
@@ -96,6 +101,11 @@
         },
         {
           "command": "fmdCompiler.download",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "navigation"
+        },
+        {
+          "command": "fmdCompiler.regenerateConfig",
           "when": "resourceExtname =~ /\\.[cChH]$/",
           "group": "navigation"
         }
@@ -125,6 +135,11 @@
           "command": "fmdCompiler.openEeprom",
           "when": "resourceExtname =~ /\\.[cChH]$/",
           "group": "fmd@5"
+        },
+        {
+          "command": "fmdCompiler.regenerateConfig",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "fmd@6"
         }
       ],
       "explorer/context": [
@@ -152,6 +167,11 @@
           "command": "fmdCompiler.openEeprom",
           "when": "resourceExtname == '.prj' || resourceExtname == '.hex'",
           "group": "fmd@5"
+        },
+        {
+          "command": "fmdCompiler.regenerateConfig",
+          "when": "resourceExtname == '.prj' || resourceExtname =~ /\\.[cChH]$/",
+          "group": "fmd@6"
         }
       ]
     },
@@ -186,8 +206,8 @@
         },
         "fmdCompiler.outputDir": {
           "type": "string",
-          "default": "",
-          "description": "输出目录（留空则与工程同目录）"
+          "default": "build",
+          "description": "输出目录。默认 build 会输出到工程目录下的 build 文件夹；留空则与工程同目录；也可填写绝对路径。"
         },
         "fmdCompiler.extraArgs": {
           "type": "string",
