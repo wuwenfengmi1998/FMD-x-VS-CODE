@@ -136,9 +136,8 @@ export class FmdCompiler {
                 this.outputChannel.appendLine('');
                 this.outputChannel.appendLine('========== 编译成功 ==========');
 
-                this.copyCompilerArtifacts(compilerArtifacts, artifacts);
-                this.logArtifact(artifacts.hexFile);
-                this.logArtifact(artifacts.binFile);
+                this.moveCompilerArtifacts(projectDir, compilerArtifacts, artifacts);
+                this.logBuildArtifacts(artifacts.outputDir);
 
                 vscode.window.showInformationMessage('FMD: 编译成功 ✓');
                 return { success: true, exitCode, artifacts };
@@ -222,20 +221,27 @@ export class FmdCompiler {
             return;
         }
 
-        const cleanExts = ['.obj', '.p1', '.pre', '.d', '.lpp', '.cmf', '.sym', '.map', '.rlf', '.sdb', '.asm'];
+        const cleanExts = ['.as', '.asm', '.bin', '.cmf', '.cof', '.d', '.hex', '.hxl', '.lpp', '.lst', '.map', '.obj', '.p1', '.pre', '.rlf', '.sdb', '.sym'];
         let count = 0;
 
         try {
-            const files = fs.readdirSync(projectDir);
-            for (const f of files) {
-                const ext = path.extname(f).toLowerCase();
-                if (cleanExts.includes(ext)) {
-                    fs.unlinkSync(path.join(projectDir, f));
-                    count++;
+            const cfg = getConfig();
+            const outputDir = this.resolveOutputDir(projectDir, cfg.outputDir);
+            for (const dir of Array.from(new Set([projectDir, outputDir]))) {
+                if (!fs.existsSync(dir)) {
+                    continue;
+                }
+                const files = fs.readdirSync(dir);
+                for (const f of files) {
+                    const ext = path.extname(f).toLowerCase();
+                    if (cleanExts.includes(ext)) {
+                        fs.unlinkSync(path.join(dir, f));
+                        count++;
+                    }
                 }
             }
-            this.outputChannel.appendLine(`[FMD] 清理完成，删除 ${count} 个中间文件`);
-            vscode.window.showInformationMessage(`FMD: 清理完成，删除 ${count} 个中间文件`);
+            this.outputChannel.appendLine(`[FMD] 清理完成，删除 ${count} 个编译产物`);
+            vscode.window.showInformationMessage(`FMD: 清理完成，删除 ${count} 个编译产物`);
         } catch (err) {
             vscode.window.showErrorMessage(`FMD 清理失败: ${err}`);
         }
@@ -271,20 +277,42 @@ export class FmdCompiler {
         return path.isAbsolute(outputDir) ? outputDir : path.join(projectDir, outputDir);
     }
 
-    private copyCompilerArtifacts(from: FmdOutputArtifacts, to: FmdOutputArtifacts): void {
+    private moveCompilerArtifacts(projectDir: string, from: FmdOutputArtifacts, to: FmdOutputArtifacts): void {
         fs.mkdirSync(to.outputDir, { recursive: true });
-        const pairs = [
-            [from.hexFile, to.hexFile],
-            [from.binFile, to.binFile],
-        ];
+        const artifactExts = new Set([
+            '.as', '.asm', '.bin', '.cmf', '.cof', '.d', '.hex', '.hxl', '.lpp',
+            '.lst', '.map', '.obj', '.p1', '.pre', '.rlf', '.sdb', '.sym',
+        ]);
 
-        for (const [source, target] of pairs) {
-            if (source === target || !fs.existsSync(source)) {
+        for (const file of fs.readdirSync(projectDir)) {
+            const source = path.join(projectDir, file);
+            if (!fs.statSync(source).isFile()) {
                 continue;
             }
+
+            const ext = path.extname(file).toLowerCase();
+            if (!artifactExts.has(ext)) {
+                continue;
+            }
+
+            const targetName = this.getOutputArtifactName(file, from.projectName, to.projectName);
+            const target = path.join(to.outputDir, targetName);
+            if (source === target) {
+                continue;
+            }
+
             fs.copyFileSync(source, target);
-            this.outputChannel.appendLine(`复制输出: ${source} -> ${target}`);
+            fs.unlinkSync(source);
+            this.outputChannel.appendLine(`移动输出: ${source} -> ${target}`);
         }
+    }
+
+    private getOutputArtifactName(fileName: string, compilerProjectName: string, outputProjectName: string): string {
+        const base = path.basename(fileName, path.extname(fileName));
+        const ext = path.extname(fileName);
+        return base.toLowerCase() === compilerProjectName.toLowerCase()
+            ? outputProjectName + ext.toLowerCase()
+            : fileName;
     }
 
     private resolveCompilerChip(projectDir: string, projectName: string, projectChip: string, compilerPath: string): string {
@@ -515,8 +543,17 @@ export class FmdCompiler {
         }));
     }
 
-    private logArtifact(filePath: string): void {
-        if (fs.existsSync(filePath)) {
+    private logBuildArtifacts(outputDir: string): void {
+        if (!fs.existsSync(outputDir)) {
+            return;
+        }
+
+        this.outputChannel.appendLine(`输出目录: ${outputDir}`);
+        for (const file of fs.readdirSync(outputDir)) {
+            const filePath = path.join(outputDir, file);
+            if (!fs.statSync(filePath).isFile()) {
+                continue;
+            }
             const stat = fs.statSync(filePath);
             this.outputChannel.appendLine(`输出: ${filePath} (${stat.size} 字节)`);
         }
