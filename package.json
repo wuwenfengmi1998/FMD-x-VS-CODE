@@ -1,0 +1,353 @@
+{
+  "name": "fmd-c-compiler",
+  "displayName": "FMD C Compiler",
+  "description": "FMD/FT61FC6X 系列 MCU 编译器支持（C.exe 工具链）",
+  "version": "0.2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "fmdCompiler.build",
+        "title": "FMD: Build Project",
+        "icon": "$(play)"
+      },
+      {
+        "command": "fmdCompiler.buildFile",
+        "title": "FMD: Build Current File"
+      },
+      {
+        "command": "fmdCompiler.clean",
+        "title": "FMD: Clean Project"
+      },
+      {
+        "command": "fmdCompiler.selectProject",
+        "title": "FMD: Select Project (.prj)"
+      },
+      {
+        "command": "fmdCompiler.openOutput",
+        "title": "FMD: Show Build Output"
+      },
+      {
+        "command": "fmdCompiler.setCompilerPath",
+        "title": "FMD: Set Compiler Path"
+      },
+      {
+        "command": "fmdCompiler.detectCompilerPath",
+        "title": "FMD: Detect Compiler Path"
+      },
+      {
+        "command": "fmdCompiler.selectChip",
+        "title": "FMD: Select Target Chip"
+      },
+      {
+        "command": "fmdCompiler.syncChipFromProject",
+        "title": "FMD: Use Chip From Project File"
+      },
+      {
+        "command": "fmdCompiler.configureProgrammer",
+        "title": "FMD: Configure Programmer"
+      },
+      {
+        "command": "fmdCompiler.download",
+        "title": "FMD: Download/Program MCU",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "fmdCompiler.buildAndDownload",
+        "title": "FMD: Build and Download MCU"
+      },
+      {
+        "command": "fmdCompiler.openEeprom",
+        "title": "FMD: Open EEPROM Editor"
+      },
+      {
+        "command": "fmdCompiler.readEeprom",
+        "title": "FMD: Read EEPROM From MCU"
+      },
+      {
+        "command": "fmdCompiler.writeEeprom",
+        "title": "FMD: Write EEPROM To MCU"
+      },
+      {
+        "command": "fmdCompiler.exportEepromHex",
+        "title": "FMD: Export EEPROM HEX"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "fmdCompiler.build",
+        "key": "f7",
+        "when": "editorTextFocus && resourceExtname =~ /\\.[cChH]$/"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "fmdCompiler.build",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "navigation"
+        },
+        {
+          "command": "fmdCompiler.download",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "fmdCompiler.build",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "fmd@1"
+        },
+        {
+          "command": "fmdCompiler.buildFile",
+          "when": "resourceExtname =~ /\\.[cC]$/",
+          "group": "fmd@2"
+        },
+        {
+          "command": "fmdCompiler.clean",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "fmd@3"
+        },
+        {
+          "command": "fmdCompiler.buildAndDownload",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "fmd@4"
+        },
+        {
+          "command": "fmdCompiler.openEeprom",
+          "when": "resourceExtname =~ /\\.[cChH]$/",
+          "group": "fmd@5"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "fmdCompiler.build",
+          "when": "resourceExtname == '.prj' || resourceExtname =~ /\\.[cC]$/",
+          "group": "fmd@1"
+        },
+        {
+          "command": "fmdCompiler.selectProject",
+          "when": "resourceExtname == '.prj'",
+          "group": "fmd@2"
+        },
+        {
+          "command": "fmdCompiler.download",
+          "when": "resourceExtname == '.prj' || resourceExtname == '.hex' || resourceExtname == '.bin'",
+          "group": "fmd@3"
+        },
+        {
+          "command": "fmdCompiler.buildAndDownload",
+          "when": "resourceExtname == '.prj' || resourceExtname =~ /\\.[cC]$/",
+          "group": "fmd@4"
+        },
+        {
+          "command": "fmdCompiler.openEeprom",
+          "when": "resourceExtname == '.prj' || resourceExtname == '.hex'",
+          "group": "fmd@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "FMD Compiler",
+      "properties": {
+        "fmdCompiler.compilerPath": {
+          "type": "string",
+          "default": "C:\\Program Files (x86)\\CCompiler\\Compiler\\data\\bin\\c.exe",
+          "description": "编译器 c.exe 的路径"
+        },
+        "fmdCompiler.compilerSearchPaths": {
+          "type": "array",
+          "default": [
+            "C:\\Program Files (x86)\\CCompiler\\Compiler\\data\\bin\\c.exe",
+            "C:\\Program Files\\CCompiler\\Compiler\\data\\bin\\c.exe"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "自动检测编译器时检查的候选路径"
+        },
+        "fmdCompiler.projectFile": {
+          "type": "string",
+          "default": "",
+          "description": "当前工程 .prj 文件路径（留空则自动搜索）"
+        },
+        "fmdCompiler.chip": {
+          "type": "string",
+          "default": "FT61FC6X",
+          "description": "目标芯片型号"
+        },
+        "fmdCompiler.outputDir": {
+          "type": "string",
+          "default": "",
+          "description": "输出目录（留空则与工程同目录）"
+        },
+        "fmdCompiler.extraArgs": {
+          "type": "string",
+          "default": "",
+          "description": "额外的编译器参数"
+        },
+        "fmdCompiler.autoSaveBeforeBuild": {
+          "type": "boolean",
+          "default": true,
+          "description": "编译前自动保存所有文件"
+        },
+        "fmdCompiler.showOutputOnBuild": {
+          "type": "boolean",
+          "default": true,
+          "description": "编译时自动显示输出面板"
+        },
+        "fmdCompiler.programmerPath": {
+          "type": "string",
+          "default": "",
+          "description": "外部烧录/下载工具路径"
+        },
+        "fmdCompiler.programmerArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "烧录工具参数，支持 ${chip}、${hexFile}、${binFile}、${downloadFile} 等变量"
+        },
+        "fmdCompiler.programmerCwd": {
+          "type": "string",
+          "default": "${projectDir}",
+          "description": "烧录工具工作目录"
+        },
+        "fmdCompiler.programmerUseShell": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否通过 shell 执行烧录工具"
+        },
+        "fmdCompiler.programmerSuccessExitCodes": {
+          "type": "array",
+          "default": [0],
+          "items": {
+            "type": "number"
+          },
+          "description": "认为烧录成功的退出码"
+        },
+        "fmdCompiler.downloadFileType": {
+          "type": "string",
+          "enum": ["hex", "bin"],
+          "default": "hex",
+          "description": "下载程序时使用的文件类型"
+        },
+        "fmdCompiler.autoBuildBeforeDownload": {
+          "type": "boolean",
+          "default": false,
+          "description": "下载前是否自动编译"
+        },
+        "fmdCompiler.showOutputOnDownload": {
+          "type": "boolean",
+          "default": true,
+          "description": "下载时自动显示输出面板"
+        },
+        "fmdCompiler.eepromBaseAddress": {
+          "type": "string",
+          "default": "0x2100",
+          "description": "EEPROM 在 HEX 文件中的基地址"
+        },
+        "fmdCompiler.eepromStart": {
+          "type": "string",
+          "default": "0x00",
+          "description": "EEPROM 逻辑起始地址"
+        },
+        "fmdCompiler.eepromSize": {
+          "type": "number",
+          "default": 112,
+          "description": "EEPROM 字节数"
+        },
+        "fmdCompiler.eepromFill": {
+          "type": "string",
+          "default": "0xFF",
+          "description": "新建 EEPROM 镜像的默认填充值"
+        },
+        "fmdCompiler.eepromImageFile": {
+          "type": "string",
+          "default": "",
+          "description": "EEPROM 镜像文件路径（留空自动使用工程名 .eep.hex）"
+        },
+        "fmdCompiler.eepromReadArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "外部工具读取 EEPROM 的参数，支持 ${eepromFile} 等变量"
+        },
+        "fmdCompiler.eepromWriteArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "外部工具写入 EEPROM 的参数，支持 ${eepromFile} 等变量"
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "c",
+        "extensions": [".C", ".c"],
+        "aliases": ["C", "c"]
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "fmd-gcc",
+        "owner": "fmd",
+        "fileLocation": ["absolute"],
+        "pattern": [
+          {
+            "regexp": "^(.+\\.(?:[cChH]|C|H)):(\\d+):\\s+(error|warning|note):\\s+(.+)$",
+            "file": 1,
+            "line": 2,
+            "severity": 3,
+            "message": 4
+          }
+        ]
+      },
+      {
+        "name": "fmd-linker",
+        "owner": "fmd",
+        "fileLocation": ["absolute"],
+        "pattern": [
+          {
+            "regexp": "^.*?:\\s+(Error|Warning)\\s+\\[(\\w+)\\]\\s+(.+)$",
+            "severity": 1,
+            "code": 2,
+            "message": 3
+          }
+        ]
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "fmd-build",
+        "properties": {
+          "projectFile": {
+            "type": "string",
+            "description": ".prj 文件路径"
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
