@@ -70,9 +70,13 @@ export class FmdCompiler {
         }
 
         const projectName = projectInfo?.projectName || path.basename(projectDir);
+        const projectChip = projectInfo?.device || cfg.chip;
+        const compilerChip = this.resolveCompilerChip(projectDir, projectName, projectChip, cfg.compilerPath);
         const outputDir = this.resolveOutputDir(projectDir, cfg.outputDir);
         fs.mkdirSync(outputDir, { recursive: true });
         const artifacts = this.getOutputArtifacts(projectDir, projectName, outputDir);
+        const compilerOutputBaseName = projectName.toLowerCase();
+        const compilerArtifacts = this.getOutputArtifacts(projectDir, compilerOutputBaseName, projectDir);
 
         this.building = true;
         this.diagnostics.clear();
@@ -84,14 +88,29 @@ export class FmdCompiler {
         this.outputChannel.appendLine('');
         this.outputChannel.appendLine(`========== FMD 开始编译: ${projectName} ==========`);
         this.outputChannel.appendLine(`工程目录: ${projectDir}`);
-        this.outputChannel.appendLine(`芯片: ${cfg.chip}`);
+        this.outputChannel.appendLine(`工程芯片: ${projectChip}${projectInfo?.device ? '（来自 .prj Device）' : '（来自 VS Code 配置）'}`);
+        if (compilerChip !== projectChip) {
+            this.outputChannel.appendLine(`编译器芯片: ${compilerChip}（由工程芯片映射/历史 map 推导）`);
+        }
         if (projectInfo?.device && projectInfo.device !== cfg.chip) {
-            this.outputChannel.appendLine(`[警告] 配置芯片 ${cfg.chip} 与工程文件 Device ${projectInfo.device} 不一致，本次编译使用配置芯片 ${cfg.chip}`);
+            this.outputChannel.appendLine(`[提示] VS Code 配置芯片 ${cfg.chip} 与工程文件 Device ${projectInfo.device} 不一致，本次编译使用工程文件 Device ${projectInfo.device}`);
         }
         this.outputChannel.appendLine(new Date().toLocaleString());
         this.outputChannel.appendLine('');
 
         try {
+            const support = this.checkCompilerChipSupport(cfg.compilerPath, compilerChip);
+            if (!support.supported) {
+                const suggestions = this.findChipSuggestions(support.chips, projectChip);
+                this.outputChannel.appendLine(`[错误] 当前编译器芯片库不支持: ${compilerChip}（工程芯片: ${projectChip}）`);
+                this.outputChannel.appendLine(`芯片库: ${support.chipInfoFile || '未找到 gcc8.ini'}`);
+                if (suggestions.length > 0) {
+                    this.outputChannel.appendLine(`相近芯片: ${suggestions.join(', ')}`);
+                }
+                vscode.window.showErrorMessage(`FMD: 当前编译器不支持芯片 ${compilerChip}（工程 Device: ${projectChip}），请确认 CCompiler 版本或工程 Device 设置`);
+                return { success: false, exitCode: -1, artifacts };
+            }
+
             const cFiles = this.getSourceFiles(projectDir, projectInfo);
 
             if (cFiles.length === 0) {
@@ -105,7 +124,7 @@ export class FmdCompiler {
 
             // 构建编译命令
             // c.exe 是 XC8-like 驱动，可以接受多文件一次编译+链接
-            const args = this.buildCompileArgs(cFiles, projectDir, outputDir, projectName, cfg);
+            const args = this.buildCompileArgs(cFiles, projectDir, compilerArtifacts.outputDir, compilerArtifacts.projectName, compilerChip, cfg);
 
             this.outputChannel.appendLine('编译命令:');
             this.outputChannel.appendLine(`  ${cfg.compilerPath} ${args.join(' ')}`);
@@ -117,6 +136,7 @@ export class FmdCompiler {
                 this.outputChannel.appendLine('');
                 this.outputChannel.appendLine('========== 编译成功 ==========');
 
+                this.copyCompilerArtifacts(compilerArtifacts, artifacts);
                 this.logArtifact(artifacts.hexFile);
                 this.logArtifact(artifacts.binFile);
 
@@ -251,6 +271,95 @@ export class FmdCompiler {
         return path.isAbsolute(outputDir) ? outputDir : path.join(projectDir, outputDir);
     }
 
+    private copyCompilerArtifacts(from: FmdOutputArtifacts, to: FmdOutputArtifacts): void {
+        fs.mkdirSync(to.outputDir, { recursive: true });
+        const pairs = [
+            [from.hexFile, to.hexFile],
+            [from.binFile, to.binFile],
+        ];
+
+        for (const [source, target] of pairs) {
+            if (source === target || !fs.existsSync(source)) {
+                continue;
+            }
+            fs.copyFileSync(source, target);
+            this.outputChannel.appendLine(`复制输出: ${source} -> ${target}`);
+        }
+    }
+
+    private resolveCompilerChip(projectDir: string, projectName: string, projectChip: string, compilerPath: string): string {
+        const historicalChip = this.readMachineTypeFromMap(projectDir, projectName);
+        if (historicalChip && this.checkCompilerChipSupport(compilerPath, historicalChip).supported) {
+            return historicalChip;
+        }
+
+        if (this.checkCompilerChipSupport(compilerPath, projectChip).supported) {
+            return projectChip;
+        }
+
+        const mappedChip = this.mapProjectChipToCompilerChip(projectChip);
+        if (mappedChip && this.checkCompilerChipSupport(compilerPath, mappedChip).supported) {
+            return mappedChip;
+        }
+
+        return mappedChip || projectChip;
+    }
+
+    private readMachineTypeFromMap(projectDir: string, projectName: string): string | undefined {
+        const candidates = [
+            path.join(projectDir, projectName + '.map'),
+            path.join(projectDir, projectName.toLowerCase() + '.map'),
+        ];
+
+        for (const file of candidates) {
+            if (!fs.existsSync(file)) {
+                continue;
+            }
+            const text = fs.readFileSync(file, 'utf8');
+            const m = /Machine\s+type\s+is\s+([A-Za-z0-9_]+)/i.exec(text);
+            if (m) {
+                return m[1].trim();
+            }
+        }
+
+        return undefined;
+    }
+
+    private mapProjectChipToCompilerChip(projectChip: string): string | undefined {
+        // 官方 IDE 的 Device 名称可能是市场/工程型号，c.exe 使用的是芯片库型号。
+        // 例如 .prj: FT61E13X，链接器实际 Machine type: FT61F13X。
+        const known: Record<string, string> = {
+            FT61E13X: 'FT61F13X',
+        };
+        const upper = projectChip.toUpperCase();
+        return known[upper] || upper.replace(/^FT61E/, 'FT61F');
+    }
+
+    private checkCompilerChipSupport(compilerPath: string, chip: string): { supported: boolean; chips: string[]; chipInfoFile?: string } {
+        const compilerBinDir = path.dirname(compilerPath);
+        const compilerDataDir = path.dirname(compilerBinDir);
+        const chipInfoFile = path.join(compilerDataDir, 'dat', 'gcc8.ini');
+        if (!fs.existsSync(chipInfoFile)) {
+            return { supported: true, chips: [], chipInfoFile };
+        }
+
+        const text = fs.readFileSync(chipInfoFile, 'utf8');
+        const chips = Array.from(text.matchAll(/^\[([^\]]+)\]/gm)).map(m => m[1].trim());
+        return {
+            supported: chips.some(c => c.toUpperCase() === chip.toUpperCase()),
+            chips,
+            chipInfoFile,
+        };
+    }
+
+    private findChipSuggestions(chips: string[], chip: string): string[] {
+        const normalized = chip.toUpperCase();
+        const prefix = normalized.slice(0, Math.max(4, normalized.length - 2));
+        return chips
+            .filter(c => c.toUpperCase().startsWith(prefix) || normalized.startsWith(c.toUpperCase().slice(0, Math.max(4, c.length - 2))))
+            .slice(0, 10);
+    }
+
     /**
      * 构造编译参数
      * 基于对 .map 文件的分析，c.exe 是 XC8-style 驱动器
@@ -261,6 +370,7 @@ export class FmdCompiler {
         projectDir: string,
         outputDir: string,
         projectName: string,
+        chip: string,
         cfg: ReturnType<typeof getConfig>
     ): string[] {
         const compilerBinDir = path.dirname(cfg.compilerPath);
@@ -268,7 +378,7 @@ export class FmdCompiler {
         const includeDir = path.join(compilerDataDir, 'include');
 
         const args: string[] = [
-            `--chip=${cfg.chip}`,
+            `--chip=${chip}`,
             `-I${includeDir}`,
             `-o${path.join(outputDir, projectName + '.hex')}`,
         ];

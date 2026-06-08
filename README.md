@@ -1,6 +1,6 @@
 # FMD C Compiler
 
-FMD C Compiler 是一个用于 FMD / FT61FC6X 系列 MCU 工程开发的 VS Code 插件。插件封装厂商 `c.exe` 编译器，并自动生成 VS Code 工程配置，让传统 MCU 工程可以在 VS Code 中编辑、编译、管理输出文件和配置 IntelliSense。
+FMD C Compiler 是一个用于 FMD 系列 MCU 工程开发的 VS Code 插件。插件封装厂商 `c.exe` 编译器，并自动生成 VS Code 工程配置，让传统 MCU 工程可以在 VS Code 中编辑、编译、管理输出文件和配置 IntelliSense。
 
 ## 功能特性
 
@@ -35,25 +35,7 @@ xxx.C
 C:\Program Files (x86)\CCompiler\Compiler\data\bin\c.exe
 ```
 
-默认芯片：
-
-```text
-FT61FC6X
-```
-
-## 安装方式
-
-从 VSIX 安装：
-
-```bash
-code --install-extension fmd-c-compiler-0.2.9.vsix
-```
-
-也可以在 VS Code 扩展面板中选择：
-
-```text
-Install from VSIX...
-```
+目标芯片会优先从 `.prj` 文件中的 `Device = ...` 字段自动识别。部分官方工程型号会映射为编译器芯片库中的实际型号，例如 `FT61E13X` 会按官方工具输出映射为 `FT61F13X` 后传给 `c.exe --chip=...`。
 
 ## 快速开始
 
@@ -138,7 +120,7 @@ FMD: Regenerate VS Code Config
 ```json
 {
   "fmdCompiler.compilerPath": "C:\\Program Files (x86)\\CCompiler\\Compiler\\data\\bin\\c.exe",
-  "fmdCompiler.chip": "FT61FC6X",
+  "fmdCompiler.chip": "从 .prj 的 Device 自动识别，或手动指定",
   "fmdCompiler.projectFile": "C:\\path\\to\\project.prj",
   "fmdCompiler.outputDir": "build",
   "fmdCompiler.autoSaveBeforeBuild": true,
@@ -159,7 +141,7 @@ FMD: Regenerate VS Code Config
     "C:/Program Files (x86)/CCompiler/Compiler/data/include"
   ],
   "defines": [
-    "_FT61FC6X",
+    "_当前工程芯片型号",
     "__GCC8PRO__",
     "_CHIP_SELECT_H_"
   ],
@@ -198,6 +180,8 @@ VS Code C/C++ IntelliSense 可能无法识别这些寄存器。插件会自动�
 ```text
 工程目录\build\
 ```
+
+为了兼容官方工具链，插件会先让 `c.exe` 按官方风格输出到工程根目录的小写文件名前缀，例如 `ft61e132a.hex`，编译成功后再复制为配置输出目录中的工程名文件，例如 `build\FT61E132A.hex`。
 
 也可以设置为绝对路径，例如：
 
@@ -328,7 +312,21 @@ C/C++: Reset IntelliSense Database
 FMD: Regenerate VS Code Config
 ```
 
-### 4. 下载功能不能直接使用
+### 4. 编译提示芯片不在 gcc8.ini 中
+
+如果输出类似：
+
+```text
+chip "FT61E13X" not present in chipinfo file "...gcc8.ini"
+```
+
+说明插件已经从 `.prj` 的 `Device` 字段识别出了芯片，但当前安装的 CCompiler 芯片数据库不支持该型号。插件会尝试从历史 `.map` 的 `Machine type is ...` 和内置别名规则推导实际编译器芯片名，例如 `FT61E13X -> FT61F13X`。如果仍失败，请确认：
+
+- 是否安装了支持该芯片的新版本 CCompiler
+- `.prj` 中的 `Device = ...` 是否写成了官方工具支持的芯片名
+- `fmdCompiler.compilerPath` 是否指向正确的 CCompiler 安装目录
+
+### 5. 下载功能不能直接使用
 
 需要先配置实际使用的外部烧录工具路径和参数：
 

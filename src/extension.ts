@@ -287,7 +287,8 @@ function ensureCppProperties(): void {
         const propertiesFile = path.join(vscodeDir, 'c_cpp_properties.json');
         const projectFile = projectManager.getProjectFile() || findSinglePrjFile(folder.uri.fsPath) || cfg.projectFile;
         const projectDir = projectFile ? path.dirname(projectFile) : folder.uri.fsPath;
-        const chip = (projectFile ? projectManager.getCurrentChip(projectFile) : undefined) || cfg.chip;
+        const projectChip = (projectFile ? projectManager.getCurrentChip(projectFile) : undefined) || cfg.chip;
+        const chip = resolveIntellisenseChip(projectDir, path.basename(projectDir), projectChip, compilerInclude);
         const intellisenseHeader = ensureFmdIntellisenseHeader(vscodeDir, compilerInclude, chip);
         const includePath = [
             '${workspaceFolder}/**',
@@ -355,6 +356,43 @@ function ensureCppProperties(): void {
         fs.writeFileSync(propertiesFile, JSON.stringify(properties, null, 2) + '\n');
         outputChannel.appendLine(`[FMD] 已自动生成/更新 C/C++ 头文件路径: ${propertiesFile}`);
     }
+}
+
+function resolveIntellisenseChip(projectDir: string, projectName: string, projectChip: string, compilerInclude: string): string {
+    const historicalChip = readMachineTypeFromMap(projectDir, projectName);
+    if (historicalChip && findChipHeader(compilerInclude, historicalChip)) {
+        return historicalChip;
+    }
+    if (findChipHeader(compilerInclude, projectChip)) {
+        return projectChip;
+    }
+    const mappedChip = mapProjectChipToCompilerChip(projectChip);
+    return findChipHeader(compilerInclude, mappedChip) ? mappedChip : projectChip;
+}
+
+function readMachineTypeFromMap(projectDir: string, projectName: string): string | undefined {
+    const candidates = [
+        path.join(projectDir, projectName + '.map'),
+        path.join(projectDir, projectName.toLowerCase() + '.map'),
+    ];
+    for (const file of candidates) {
+        if (!fs.existsSync(file)) {
+            continue;
+        }
+        const m = /Machine\s+type\s+is\s+([A-Za-z0-9_]+)/i.exec(fs.readFileSync(file, 'utf8'));
+        if (m) {
+            return m[1].trim();
+        }
+    }
+    return undefined;
+}
+
+function mapProjectChipToCompilerChip(projectChip: string): string {
+    const known: Record<string, string> = {
+        FT61E13X: 'FT61F13X',
+    };
+    const upper = projectChip.toUpperCase();
+    return known[upper] || upper.replace(/^FT61E/, 'FT61F');
 }
 
 function ensureFmdIntellisenseHeader(vscodeDir: string, compilerInclude: string, chip: string): string {

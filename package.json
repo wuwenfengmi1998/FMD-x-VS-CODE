@@ -3,7 +3,7 @@
   "publisher": "kevinngmanfong",
   "displayName": "FMD C Compiler",
   "description": "FMD/FT61FC6X 系列 MCU 编译器支持（C.exe 工具链）",
-  "version": "0.2.10",
+  "version": "0.2.13",
   "license": "MIT",
   "icon": "resources/icon.png",
   "engines": {
